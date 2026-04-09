@@ -52,6 +52,27 @@ def init_db():
         )
     """)
 
+    # ── MIGRATIONS ───────────────────────────────
+    # Safely add new columns to existing databases.
+    # If the column already exists SQLite raises an error — we ignore it.
+    # This means the fix works on BOTH fresh installs AND old deployed databases.
+    migrations = [
+        "ALTER TABLE score_history ADD COLUMN stress_score REAL DEFAULT 0",
+        "ALTER TABLE score_history ADD COLUMN savings_rate REAL DEFAULT 0",
+        "ALTER TABLE score_history ADD COLUMN survival_months REAL DEFAULT 0",
+        "ALTER TABLE score_history ADD COLUMN expense_ratio REAL DEFAULT 0",
+        "ALTER TABLE user_profiles ADD COLUMN age INTEGER DEFAULT 25",
+        "ALTER TABLE user_profiles ADD COLUMN city TEXT DEFAULT ''",
+        "ALTER TABLE lend_borrow ADD COLUMN due_date TEXT DEFAULT NULL",
+        "ALTER TABLE lend_borrow ADD COLUMN settled_at TEXT DEFAULT NULL",
+    ]
+    for migration in migrations:
+        try:
+            conn.execute(migration)
+            conn.commit()
+        except Exception:
+            pass  # Column already exists — safe to skip
+
     # ── DAILY EXPENSES ────────────────────────────
     c.execute("""
         CREATE TABLE IF NOT EXISTS daily_expenses (
