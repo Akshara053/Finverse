@@ -279,6 +279,24 @@ label {{ font-size:10px !important; font-weight:700 !important; color:{T['muted'
 .stButton > button {{ background:linear-gradient(135deg,{T['accent']},{T['accent2']}) !important; color:#fff !important; border:none !important; border-radius:9px !important; font-weight:800 !important; font-size:12px !important; letter-spacing:0.1em !important; text-transform:uppercase !important; padding:12px 20px !important; width:100% !important; box-shadow:0 4px 14px {T['accent']}30 !important; transition:all 0.2s !important; }}
 .stButton > button:hover {{ transform:translateY(-2px) !important; box-shadow:0 8px 22px {T['accent']}50 !important; }}
 
+/* Toggle/secondary style — for ▼ Read / ▲ Close buttons */
+div[data-testid="stVerticalBlock"] .stButton > button[data-testid*="tog_"],
+div[data-testid="stVerticalBlock"] .stButton > button[data-testid*="qa_"] {{
+    background: transparent !important;
+    color: {T['muted']} !important;
+    border: 1px solid {T['border']} !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    text-transform: none !important;
+    letter-spacing: 0.02em !important;
+    box-shadow: none !important;
+    padding: 5px 14px !important;
+    opacity: 0.75 !important;
+    width: auto !important;
+    margin-top: -4px !important;
+    margin-bottom: 6px !important;
+}}
+
 /* METRICS */
 [data-testid="metric-container"] {{ background:{T['bg']} !important; border:1px solid {T['border']} !important; border-radius:10px !important; padding:13px 15px !important; }}
 [data-testid="stMetricLabel"] {{ font-size:10px !important; color:{T['muted']} !important; text-transform:uppercase !important; letter-spacing:0.1em !important; }}
@@ -346,6 +364,29 @@ label {{ font-size:10px !important; font-weight:700 !important; color:{T['muted'
 ::-webkit-scrollbar {{ width:3px; height:3px; background:transparent; }}
 ::-webkit-scrollbar-thumb {{ background:{T['border']}; border-radius:3px; }}
 hr {{ border-color:{T['border']} !important; }}
+
+/* ── MOBILE RESPONSIVENESS ── */
+@media (max-width: 640px) {{
+    .block-container {{ padding: 0 0.75rem 4rem !important; }}
+    .sg {{ gap:6px; }}
+    .sb {{ min-width:100px; padding:10px 12px; }}
+    .sv {{ font-size:18px !important; }}
+    .topnav {{ padding:10px 0; }}
+    .nav-logo {{ font-size:17px; }}
+    .card {{ padding:14px 16px; }}
+    .card-grad {{ padding:14px 16px; }}
+    .lbr {{ padding:8px 10px; gap:8px; }}
+    .lsc {{ font-size:14px; }}
+    .stTabs [data-baseweb="tab"] {{ padding:10px 10px !important; font-size:10px !important; }}
+    .section-title {{ font-size:16px !important; }}
+    h1 {{ font-size:36px !important; }}
+}}
+
+@media (max-width: 480px) {{
+    .sg {{ flex-direction: column; }}
+    .sb {{ min-width:unset; width:100%; }}
+    .stTabs [data-baseweb="tab"] {{ padding:9px 8px !important; font-size:9px !important; }}
+}}
 
 /* ── ANIMATIONS ── */
 @keyframes fadeInUp {{
@@ -605,7 +646,7 @@ if st.session_state.page == "landing":
     st.markdown(f"""
     <div style="margin:52px 0 28px 0;text-align:center;">
         <h2 style="font-size:30px;font-weight:800;color:{T['text']};margin:0 0 10px 0;">
-            78% of Indians live paycheck to paycheck
+            78% of Indians live paycheck to paycheck <a href="https://www.rbi.org.in/financialeducation" target="_blank" style="font-size:11px;color:#475569;text-decoration:none;">[Source: RBI Financial Awareness Survey]</a>
         </h2>
         <p style="font-size:14px;color:{T['sub']};max-width:560px;margin:0 auto;line-height:1.8;">
             No one teaches personal finance in school. Banks profit from confusion.
@@ -866,6 +907,21 @@ if st.session_state.page == "onboard":
                         st.error(reg["error"])
             st.markdown("</div>", unsafe_allow_html=True)
 
+        st.markdown(f"<div style='text-align:center;margin-top:6px;'>", unsafe_allow_html=True)
+        if st.button("Try as Guest — No account needed", key="guest_btn"):
+            st.session_state.update({
+                "page": "app", "logged_in": True, "username": "Guest",
+                "persona_name": "Working Professional",
+                "challenges_done": set(), "is_guest": True,
+            })
+            st.rerun()
+        st.markdown(
+            f"<div style='text-align:center;margin-top:8px;font-size:11px;color:{T["muted"]};'>"
+            f"Guest mode: calculate your score, no data saved</div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
         if st.button("← Back to home", key="back_land"):
             st.session_state.page = "landing"
             st.rerun()
@@ -878,12 +934,13 @@ if st.session_state.page == "onboard":
 if not st.session_state.logged_in:
     st.session_state.page = "landing"; st.rerun()
 
-un       = st.session_state.username
-persona  = PERSONAS[st.session_state.persona_name]
-profile  = get_user_profile(un) or {}
-settings_= get_user_settings(un)
-xp_total = get_total_xp_db(un)
-lv_xp    = get_level_from_xp(xp_total)
+un        = st.session_state.username
+IS_GUEST  = st.session_state.get("is_guest", False)
+persona   = PERSONAS[st.session_state.persona_name]
+profile   = get_user_profile(un) if not IS_GUEST else {}
+settings_ = get_user_settings(un) if not IS_GUEST else {"daily_budget":1000.0,"streak":0,"last_tracked":None}
+xp_total  = get_total_xp_db(un) if not IS_GUEST else 0
+lv_xp     = get_level_from_xp(xp_total)
 
 # ── APP HEADER ──────────────────────────────
 h_logo, h_space, h_th1, h_th2, h_th3 = st.columns([4, 4, 1, 1, 1])
@@ -914,11 +971,29 @@ with h_th3:
 
 st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
 
+# Guest mode banner
+if IS_GUEST:
+    st.markdown(
+        f"<div style='background:{T["amber_bg"]};border:1px solid {T["amber_br"]};"
+        f"border-radius:8px;padding:10px 16px;margin-bottom:12px;"
+        f"display:flex;justify-content:space-between;align-items:center;'>"
+        f"<span style='font-size:13px;color:#f59e0b;'>Guest mode — your data is not saved. "
+        f"<strong>Create an account</strong> to save scores, track progress, and earn XP.</span>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+    if st.button("CREATE ACCOUNT", key="guest_upgrade"):
+        for k in list(st.session_state.keys()):
+            del st.session_state[k]
+        st.session_state.page = "onboard"
+        st.session_state.auth_tab = "signup"
+        st.rerun()
+
 # ── TABS ──────────────────────────────────────
 tab_names = ["Score", "Dashboard", "Tracker", "Lend / Borrow",
-             "Learn", "Know Finance", "Current Affairs", "Community", "Insights", "Me"]
+             "Partner", "Learn", "Know Finance", "Current Affairs", "Community", "Insights", "Me"]
 tabs = st.tabs(tab_names)
-(t_score, t_dash, t_track, t_lend,
+(t_score, t_dash, t_track, t_lend, t_part,
  t_learn, t_know, t_affairs, t_comm, t_insights, t_me) = tabs
 
 
@@ -951,6 +1026,19 @@ with t_score:
         )
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # Live input validation
+    if income > 0 and expenses > income:
+        st.warning(
+            f"Your expenses ({format_currency(expenses)}) exceed your income ({format_currency(income)}). "
+            f"This means a deficit of {format_currency(expenses - income)}/month. "
+            f"Your score will reflect this — and it will be low. That is the honest truth."
+        )
+    elif income > 0 and expenses > income * 0.9:
+        st.info(
+            f"Your expense ratio is above 90% of income. Very little room for savings. "
+            f"Consider where you can cut before calculating."
+        )
+
     if st.button("CALCULATE MY SAFETY SCORE", key="s_calc"):
         if income <= 0:
             st.error("Please enter your monthly income.")
@@ -964,17 +1052,19 @@ with t_score:
         risk   = result["risk_level"]
         stress = calculate_stress_score(income, expenses, savings, result)
 
-        save_score(un, st.session_state.persona_name, income, expenses, savings, result, stress)
-        upsert_leaderboard(un, score, lv["name"], st.session_state.persona_name)
+        if not IS_GUEST:
+            save_score(un, st.session_state.persona_name, income, expenses, savings, result, stress)
+            upsert_leaderboard(un, score, lv["name"], st.session_state.persona_name)
         st.session_state.update({
             "last_result": result, "last_income": income,
             "last_expenses": expenses, "last_savings": savings,
         })
         # Auto-award badges and log XP
-        hist_for_badges = get_score_history(un, 10)
-        new_bgs = check_and_award_score_badges(un, score, risk, result, hist_for_badges)
-        if new_bgs:
-            st.session_state["new_badges"] = new_bgs
+        if not IS_GUEST:
+            hist_for_badges = get_score_history(un, 10)
+            new_bgs = check_and_award_score_badges(un, score, risk, result, hist_for_badges)
+            if new_bgs:
+                st.session_state["new_badges"] = new_bgs
 
         # Score card
         st.markdown('<div class="card-grad">', unsafe_allow_html=True)
@@ -1016,6 +1106,8 @@ with t_score:
                 f"<div style='font-size:12px;color:{T['muted']};margin-top:4px;line-height:1.5;'>"
                 f"{stress_tips.get(s_label,'')}</div>"
                 f"<div style='font-size:10px;color:{T['muted']};margin-top:4px;'>0 = no stress · 100 = severe</div>"
+                f"<div style='font-size:10px;color:{T['muted']};margin-top:2px;font-style:italic;'>"
+                f"How calculated: {stress_breakdown}</div>"
                 f"</div></div>{bar(stress, s_color)}</div>",
                 unsafe_allow_html=True,
             )
@@ -1063,6 +1155,48 @@ with t_score:
                 unsafe_allow_html=True,
             )
             st.markdown('</div>', unsafe_allow_html=True)
+
+        # Score history sparkline — "you've improved X points"
+        history_spark = [] if IS_GUEST else get_score_history(un, 10)
+        if len(history_spark) >= 2 and PLOTLY:
+            spark_d = [h["created_at"][:10] for h in reversed(history_spark)]
+            spark_s = [h["score"]           for h in reversed(history_spark)]
+            first_s = spark_s[0];  last_s = spark_s[-1]
+            delta_s = last_s - first_s
+            delta_col   = T["accent"] if delta_s >= 0 else "#f87171"
+            delta_arrow = "↑" if delta_s > 0 else ("↓" if delta_s < 0 else "→")
+            st.markdown(
+                f"<div class='card-flat'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;'>"
+                f"<span class='lbl' style='margin:0;'>Score History — {len(history_spark)} checks</span>"
+                f"<span style='font-family:Space Mono,monospace;font-size:13px;color:{delta_col};"
+                f"font-weight:700;'>{delta_arrow} {abs(delta_s):.1f} pts overall</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+            fig_sp = go.Figure()
+            fig_sp.add_trace(go.Scatter(
+                x=spark_d, y=spark_s,
+                mode="lines+markers",
+                line={"color": T["accent"], "width": 2.5},
+                marker={"color": T["accent"], "size": 6},
+                fill="tozeroy",
+                fillcolor="rgba(34,197,94,0.07)",
+            ))
+            fig_sp.add_hline(y=65, line_dash="dot", line_color=T["muted"],
+                             annotation_text="Safe (65)", annotation_font_color=T["muted"],
+                             annotation_font_size=9)
+            fig_sp.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                margin={"l": 0, "r": 0, "t": 8, "b": 0}, height=110,
+                showlegend=False,
+                xaxis={"showgrid": False, "tickfont": {"color": T["muted"], "size": 9},
+                       "linecolor": T["border"]},
+                yaxis={"gridcolor": T["border"], "range": [0, 100],
+                       "tickfont": {"color": T["muted"], "size": 9}},
+            )
+            st.plotly_chart(fig_sp, use_container_width=True, config={"displayModeBar": False})
+            st.markdown("</div>", unsafe_allow_html=True)
 
         # Suggestions + What-If
         suggs = generate_suggestions(income, expenses, savings, result)
@@ -1271,9 +1405,12 @@ with t_track:
         note = st.text_input("Note (optional)", placeholder="e.g. Lunch at Café")
     if st.button("ADD EXPENSE", key="add_exp"):
         if amt > 0:
-            save_expense(un, cat, float(amt), note, str(exp_date))
-            log_xp(un, "expense_logged")
-            st.success(f"Added: {cat}  —  {format_currency(amt)}  (+2 XP)")
+            if not IS_GUEST:
+                save_expense(un, cat, float(amt), note, str(exp_date))
+                log_xp(un, "expense_logged")
+                st.success(f"Added: {cat}  —  {format_currency(amt)}  (+2 XP)")
+            else:
+                st.warning("Create an account to save expenses.")
             st.rerun()
         else:
             st.warning("Enter an amount greater than ₹0.")
@@ -1471,6 +1608,122 @@ with t_lend:
         )
 
 
+
+# ════════════════════════════════════════════
+# PARTNER TAB — Household Financial Planning
+# ════════════════════════════════════════════
+with t_part:
+    st.markdown(
+        f"<div style='animation:fadeInUp 0.4s ease both;'>"
+        f"<div style='font-size:22px;font-weight:800;color:{T['text']};margin-bottom:4px;'>"
+        f"Household Financial Planning</div>"
+        f"<div style='font-size:14px;color:{T['muted']};margin-bottom:20px;line-height:1.6;'>"
+        f"Compare two financial profiles, see your combined health score, and calculate "
+        f"the income needed for a stable shared life together.</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    pc1, pc2 = st.columns(2)
+    with pc1:
+        st.markdown(f"<div style='font-size:11px;font-weight:700;letter-spacing:0.12em;color:{T['muted']};text-transform:uppercase;margin-bottom:8px;'>Your Profile</div>", unsafe_allow_html=True)
+        p1i = st.number_input("Your monthly income (₹)",   min_value=0.0, value=50000.0, step=1000.0, key="p1i")
+        p1e = st.number_input("Your monthly expenses (₹)", min_value=0.0, value=35000.0, step=1000.0, key="p1e")
+        p1s = st.number_input("Your total savings (₹)",    min_value=0.0, value=120000.0,step=5000.0, key="p1s")
+    with pc2:
+        st.markdown(f"<div style='font-size:11px;font-weight:700;letter-spacing:0.12em;color:{T['muted']};text-transform:uppercase;margin-bottom:8px;'>Partner's Profile</div>", unsafe_allow_html=True)
+        p2i = st.number_input("Partner's monthly income (₹)",   min_value=0.0, value=45000.0, step=1000.0, key="p2i")
+        p2e = st.number_input("Partner's monthly expenses (₹)", min_value=0.0, value=30000.0, step=1000.0, key="p2e")
+        p2s = st.number_input("Partner's total savings (₹)",    min_value=0.0, value=80000.0, step=5000.0, key="p2s")
+
+    if st.button("CALCULATE COMPATIBILITY", use_container_width=True, key="compat_btn"):
+        r1     = analyse_finances(p1i, p1e, p1s)
+        r2     = analyse_finances(p2i, p2e, p2s)
+        compat = analyse_compatibility(r1, r2)
+        cs     = compat["compatibility_score"]
+
+        if   cs >= 75: lbl_t, col_t, tip_t = "Excellent Match",   T['accent'],  "Financially well-aligned. Strong foundation for a shared life."
+        elif cs >= 55: lbl_t, col_t, tip_t = "Good Match",        "#f59e0b", "Solid base. Regular money conversations will strengthen alignment."
+        elif cs >= 35: lbl_t, col_t, tip_t = "Needs Alignment",   "#f59e0b", "Significant differences exist. Open, honest financial conversations are essential."
+        else:          lbl_t, col_t, tip_t = "Significant Gap",   "#f87171", "Major financial misalignment. Address this before any major shared commitments."
+
+        st.markdown(
+            f"<div style='background:linear-gradient(135deg,{T["grad_start"]},{T["grad_end"]});"
+            f"border:1px solid {T['green_br']};border-radius:16px;padding:32px;text-align:center;"
+            f"margin-bottom:16px;animation:fadeInUp 0.4s ease both;'>"
+            f"<div style='font-family:Space Mono,monospace;font-size:64px;font-weight:700;"
+            f"color:{col_t};line-height:1;letter-spacing:-3px;'>{cs:.0f}</div>"
+            f"<div style='font-size:18px;font-weight:800;color:{T['text']};margin:8px 0 4px 0;'>{lbl_t}</div>"
+            f"<div style='font-size:13px;color:{T['muted']};line-height:1.6;"
+            f"max-width:400px;margin:0 auto;'>{tip_t}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+        ia, ib, ic = st.columns(3)
+        ia.metric("Your Score",    f"{r1['composite_score']:.0f} / 100")
+        ib.metric("Partner Score", f"{r2['composite_score']:.0f} / 100")
+        ic.metric("Alignment",     f"{compat['alignment_score']:.0f} / 100",
+                  help="How similar your financial behaviours are.")
+
+        combined = compat["combined"]
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        lbl("Combined Household Picture")
+        cf1, cf2, cf3, cf4 = st.columns(4)
+        cf1.metric("Combined Income",  format_currency(combined["income"]))
+        cf2.metric("Combined Savings", format_currency(combined["savings"]))
+        cf3.metric("Survive Together", format_months(combined["survival_months"]))
+        cf4.metric("Combined Score",   f"{combined['composite_score']:.0f} / 100")
+        surplus_comb = combined["income"] - combined["expenses"]
+        if surplus_comb >= 0:
+            st.success(f"Combined monthly surplus: {format_currency(surplus_comb)}")
+        else:
+            st.error(f"Combined monthly deficit: {format_currency(abs(surplus_comb))} — address before major shared spending.")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        lbl("Household Income Planning")
+        st.markdown(
+            f"<p style='font-size:13px;color:{T['muted']};margin:0 0 14px 0;line-height:1.6;'>"
+            f"Based on your expenses, here is the partner income needed to reach your savings target together.</p>",
+            unsafe_allow_html=True,
+        )
+        t_sr = st.slider("Target combined savings rate (%)", 10, 40, 20, key="tsr_p")
+        rec  = recommended_partner_income(p1i, p1e, p1s, t_sr)
+        ri1, ri2, ri3 = st.columns(3)
+        ri1.metric("Min. Partner Income",     format_currency(rec["min_partner_income"]), "per month")
+        ri2.metric("Emergency Fund Target",   format_currency(rec["target_combined_savings"]))
+        ri3.metric("Partner Monthly Savings", format_currency(rec["partner_monthly_savings_target"]))
+        st.markdown(
+            f"<div style='font-size:11px;color:{T['muted']};margin-top:8px;'>"
+            f"Assumes combined living expenses ≈ {format_currency(rec['estimated_combined_expenses'])}/month "
+            f"(your expenses × 1.6 for shared living).</div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # Strengths & gaps
+        stronger = "You" if r1['savings_rate'] >= r2['savings_rate'] else "Partner"
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        lbl("Financial Strengths & Gaps")
+        items = [
+            ("Stronger saver",        stronger,                             T['accent']),
+            ("Your savings rate",      f"{r1['savings_rate']:.1f}%",         T['accent'] if r1['savings_rate']>=20 else "#f59e0b"),
+            ("Partner savings rate",   f"{r2['savings_rate']:.1f}%",         T['accent'] if r2['savings_rate']>=20 else "#f59e0b"),
+            ("Score gap",              f"{abs(r1['composite_score']-r2['composite_score']):.0f} pts", T['accent'] if abs(r1['composite_score']-r2['composite_score'])<=15 else "#f87171"),
+        ]
+        for label, val, val_color in items:
+            st.markdown(
+                f"<div style='display:flex;justify-content:space-between;padding:8px 0;"
+                f"border-bottom:1px solid {T['border']};'>"
+                f"<span style='font-size:13px;color:{T['sub']};'>{label}</span>"
+                f"<span style='font-family:Space Mono,monospace;font-size:14px;"
+                f"color:{val_color};font-weight:700;'>{val}</span></div>",
+                unsafe_allow_html=True,
+            )
+        st.markdown('</div>', unsafe_allow_html=True)
+
+
 # ════════════════════════════════════════════
 # LEARN TAB
 # ════════════════════════════════════════════
@@ -1496,72 +1749,126 @@ with t_learn:
     st.markdown(bar(int(done_ct / total_m * 100)), unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # Session-state based card expansion — no expander, no _arrow_right bug
+    if "open_module" not in st.session_state:
+        st.session_state.open_module = None
+
     modules_by_level = get_modules_by_level()
     for level_name, modules in modules_by_level.items():
-        lc = level_colors.get(level_name, T['accent'])
+        lc = level_colors.get(level_name, T["accent"])
         st.markdown(
             f"<div style='font-size:16px;font-weight:800;color:{lc};"
-            f"margin:22px 0 10px 0;'>{level_name}</div>",
+            f"margin:22px 0 10px 0;letter-spacing:-0.3px;'>{level_name}</div>",
             unsafe_allow_html=True,
         )
         for mod in modules:
-            is_done   = mod.get("id","") in done_ids
-            title     = mod.get("title", "Module")
-            duration  = mod.get("duration", "5 min")
+            mod_id    = mod.get("id", mod.get("title",""))
+            is_done   = mod_id in done_ids
+            title_m   = mod.get("title", "Module")
+            duration_m= mod.get("duration", "5 min")
             xp_val    = mod.get("xp", 20)
-            content   = mod.get("content", "")
-            story     = mod.get("story", "")
+            cont_m    = mod.get("content", "")
+            story_m   = mod.get("story", "")
             takeaway  = mod.get("key_takeaway", mod.get("takeaway", ""))
             book_t    = mod.get("book_title", "")
             book_a    = mod.get("book_author", "")
             free_link = mod.get("free_link", "https://openlibrary.org")
             buy_link  = mod.get("buy_link", "https://www.amazon.in")
+            summary_m = mod.get("summary","")
+            is_open   = st.session_state.open_module == mod_id
 
-            status = "  ✓" if is_done else f"  ·  {duration}  ·  +{xp_val} XP"
+            # Card header — always visible
+            done_icon = "✓" if is_done else ""
+            done_col  = T["accent"] if is_done else T["text"]
+            border_col= T["green_br"] if is_done else (T["accent"] if is_open else T["border"])
+            bg_col    = T["green_bg"] if is_done else (T["surface"] if not is_open else T["bg"])
 
-            with st.expander(f"{title}{status}"):
-                # Story first
-                if story.strip():
+            header_html = (
+                f"<div style='background:{bg_col};border:1px solid {border_col};"
+                f"border-radius:12px;padding:16px 18px;margin-bottom:8px;"
+                f"cursor:pointer;transition:all 0.2s;'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:center;'>"
+                f"<div>"
+                f"<div style='font-size:15px;font-weight:700;color:{done_col};'>"
+                f"{done_icon}  {title_m}</div>"
+                f"<div style='font-size:12px;color:{T["muted"]};margin-top:3px;'>"
+                f"{summary_m}</div>"
+                f"</div>"
+                f"<div style='display:flex;align-items:center;gap:10px;flex-shrink:0;'>"
+                f"<span style='font-size:10px;color:{T["muted"]};'>{duration_m}</span>"
+                f"<span style='font-family:Space Mono,monospace;font-size:11px;"
+                f"color:{T["accent"]};font-weight:700;'>+{xp_val} XP</span>"
+                f"<span style='font-size:14px;color:{T["muted"]};'>"
+                f"{'▲' if is_open else '▼'}</span>"
+                f"</div></div></div>"
+            )
+            st.markdown(header_html, unsafe_allow_html=True)
+
+            # Toggle button (invisible, full width)
+            btn_label = "▲ Close" if is_open else f"▼ Open: {title_m}"
+            if st.button(btn_label, key=f"tog_{mod_id}", help=title_m):
+                st.session_state.open_module = None if is_open else mod_id
+                st.rerun()
+
+            # Expanded content
+            if is_open:
+                st.markdown(f"<div style='background:{T["bg"]};border:1px solid {T["border"]};"
+                            f"border-radius:0 0 12px 12px;padding:18px 20px;margin-top:-8px;"
+                            f"margin-bottom:10px;animation:fadeInUp 0.3s ease both;'>",
+                            unsafe_allow_html=True)
+
+                # Story
+                if story_m.strip():
                     st.markdown(
-                        f"<div class='story'><span class='story-label'>A real story</span>"
-                        f"{story.strip()}</div>",
+                        f"<div style='background:{T["grad_start"]};border:1px solid {T["green_br"]};"
+                        f"border-radius:10px;padding:16px 18px;margin-bottom:14px;'>"
+                        f"<div style='font-size:9px;color:{T["accent"]};text-transform:uppercase;"
+                        f"letter-spacing:0.16em;font-weight:700;margin-bottom:8px;'>A Real Story</div>"
+                        f"<div style='font-size:14px;color:{T["sub"]};line-height:1.85;"
+                        f"font-style:italic;white-space:pre-line;'>{story_m.strip()}</div>"
+                        f"</div>",
                         unsafe_allow_html=True,
                     )
                 # Content
-                if content.strip():
+                if cont_m.strip():
                     st.markdown(
-                        f"<div style='font-size:13px;color:{T['sub']};line-height:1.85;"
-                        f"white-space:pre-line;margin-bottom:12px;'>{content.strip()}</div>",
+                        f"<div style='font-size:14px;color:{T["sub"]};line-height:1.9;"
+                        f"white-space:pre-line;margin-bottom:14px;'>{cont_m.strip()}</div>",
                         unsafe_allow_html=True,
                     )
                 # Takeaway
                 if takeaway:
                     st.markdown(
-                        f"<div style='background:{T['green_bg']};border:1px solid {T['green_br']};"
-                        f"border-radius:8px;padding:12px 16px;margin-bottom:10px;'>"
-                        f"<div style='font-size:9px;color:{T['muted']};text-transform:uppercase;"
-                        f"letter-spacing:0.14em;margin-bottom:5px;'>Key Takeaway</div>"
-                        f"<div style='font-size:13px;color:{T['accent']};font-weight:600;line-height:1.5;'>"
-                        f"{takeaway}</div></div>",
+                        f"<div style='background:{T["green_bg"]};border:1px solid {T["green_br"]};"
+                        f"border-radius:10px;padding:14px 18px;margin-bottom:12px;'>"
+                        f"<div style='font-size:9px;color:{T["muted"]};text-transform:uppercase;"
+                        f"letter-spacing:0.14em;margin-bottom:6px;'>Key Takeaway</div>"
+                        f"<div style='font-size:14px;color:{T["accent"]};font-weight:700;"
+                        f"line-height:1.5;'>{takeaway}</div></div>",
                         unsafe_allow_html=True,
                     )
-                # Book link
+                # Book
                 if book_t:
                     st.markdown(
-                        f"<div style='font-size:12px;color:{T['muted']};margin-bottom:10px;'>"
-                        f"Recommended: <strong style='color:{T['sub']};'>{book_t}</strong> by {book_a}"
-                        f"  ·  <a href='{buy_link}' target='_blank' style='color:{T['accent']};"
-                        f"text-decoration:none;font-weight:700;'>Buy →</a>"
-                        f"  <a href='{free_link}' target='_blank' style='color:{T['muted']};"
-                        f"text-decoration:none;'>Free version →</a></div>",
+                        f"<div style='font-size:12px;color:{T["muted"]};padding:10px 0;"
+                        f"border-top:1px solid {T["border"]};display:flex;"
+                        f"justify-content:space-between;align-items:center;'>"
+                        f"<span>Recommended: <strong style='color:{T["sub"]};'>{book_t}</strong>"
+                        f" by {book_a}</span>"
+                        f"<div style='display:flex;gap:10px;'>"
+                        f"<a href='{buy_link}' target='_blank' style='color:{T["accent"]};"
+                        f"text-decoration:none;font-weight:700;font-size:11px;'>Buy →</a>"
+                        f"<a href='{free_link}' target='_blank' style='color:{T["muted"]};"
+                        f"text-decoration:none;font-size:11px;'>Free →</a>"
+                        f"</div></div>",
                         unsafe_allow_html=True,
                     )
+                # Complete button
                 if not is_done:
-                    if st.button(f"Mark complete  +{xp_val} XP", key=f"mod_{mod.get('id',title)}"):
-                        mark_module_complete(un, mod.get("id", title))
+                    if st.button(f"Mark Complete  +{xp_val} XP", key=f"mod_{mod_id}"):
+                        mark_module_complete(un, mod_id)
                         log_xp(un, "module_completed")
                         award_badge(un, "first_module")
-                        # Check all-beginner badge
                         prog_ = get_education_progress(un)
                         done_ = {mid for mid, d in prog_.items() if d}
                         beg_ids = [m.get("id") for m in LEARNING_MODULES if m.get("level")=="Beginner"]
@@ -1569,10 +1876,16 @@ with t_learn:
                             award_badge(un, "all_beginner")
                         if len(done_) >= len(LEARNING_MODULES):
                             award_badge(un, "all_modules")
+                        st.session_state.open_module = None
                         st.success(f"Module complete! +{xp_val} XP earned.")
                         st.rerun()
                 else:
-                    st.markdown(f"<span style='font-size:11px;color:{T['accent']};'>✓ Completed</span>", unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div style='text-align:center;padding:8px 0;"
+                        f"font-size:13px;color:{T["accent"]};font-weight:700;'>✓ Completed</div>",
+                        unsafe_allow_html=True,
+                    )
+                st.markdown("</div>", unsafe_allow_html=True)
 
     # Book list
     if BOOK_LIST:
@@ -1680,46 +1993,98 @@ with t_know:
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Q&A by category
+    # Q&A — session-state card design, no expanders
+    if "open_qa" not in st.session_state:
+        st.session_state.open_qa = None
+
     qa_by_cat = get_qa_by_category()
     cats_to_show = ALL_QA_CATEGORIES if selected_cat == "All" else [selected_cat]
 
     for cat in cats_to_show:
         if cat not in qa_by_cat:
             continue
+        cat_colors = {
+            "Money Basics": T["accent"], "Stock Market": "#3b82f6",
+            "Mutual Funds": "#8b5cf6", "Banking & RBI": "#f59e0b",
+            "Credit & Loans": "#f87171", "Career & Income": "#10b981",
+            "Insurance & Protection": "#ec4899", "Advanced Concepts": "#f97316",
+        }
+        cat_color = cat_colors.get(cat, T["accent"])
+        cat_icons = {
+            "Money Basics": "₹", "Stock Market": "📈", "Mutual Funds": "📊",
+            "Banking & RBI": "🏦", "Credit & Loans": "💳", "Career & Income": "💼",
+            "Insurance & Protection": "🛡️", "Advanced Concepts": "🎓",
+        }
+        cat_icon = cat_icons.get(cat, "•")
+
         st.markdown(
-            f"<div style='font-size:16px;font-weight:800;color:{T['accent']};"
-            f"margin:22px 0 10px 0;'>{cat}</div>",
+            f"<div style='display:flex;align-items:center;gap:10px;"
+            f"margin:28px 0 12px 0;'>"
+            f"<div style='width:36px;height:36px;background:{cat_color}20;"
+            f"border:1px solid {cat_color}40;border-radius:8px;display:flex;"
+            f"align-items:center;justify-content:center;font-size:16px;'>{cat_icon}</div>"
+            f"<div style='font-size:17px;font-weight:800;color:{T["text"]};'>{cat}</div>"
+            f"<div style='flex:1;height:1px;background:{T["border"]};margin-left:8px;'></div>"
+            f"</div>",
             unsafe_allow_html=True,
         )
+
         for q in qa_by_cat[cat]:
-            with st.expander(q["question"]):
+            qid     = q["id"]
+            is_open = st.session_state.open_qa == qid
+            q_tags  = q.get("tags", [])
+
+            # Question card
+            st.markdown(
+                f"<div style='background:{T["surface"] if not is_open else T["bg"]};"
+                f"border:1px solid {cat_color + "60" if is_open else T["border"]};"
+                f"border-radius:12px;padding:16px 20px;margin-bottom:6px;"
+                f"transition:all 0.2s;animation:fadeInUp 0.3s ease both;'>"
+                f"<div style='font-size:15px;font-weight:700;color:{T["text"]};"
+                f"line-height:1.4;margin-bottom:8px;'>{q["question"]}</div>"
+                f"<div style='display:flex;gap:8px;flex-wrap:wrap;'>"
+                + "".join(
+                    f"<span style='background:{cat_color}15;border:1px solid {cat_color}30;"
+                    f"border-radius:20px;padding:2px 10px;font-size:10px;"
+                    f"color:{cat_color};font-weight:600;'>{tag}</span>"
+                    for tag in q_tags[:4]
+                )
+                + f"</div></div>",
+                unsafe_allow_html=True,
+            )
+
+            # Toggle button
+            btn_txt = "▲ Close answer" if is_open else "▼ Read answer"
+            if st.button(btn_txt, key=f"qa_{qid}"):
+                st.session_state.open_qa = None if is_open else qid
+                st.rerun()
+
+            # Answer panel
+            if is_open:
+                answer_lines = q["answer"].strip()
                 st.markdown(
-                    f"<div style='font-size:14px;color:{T['sub']};line-height:1.9;"
-                    f"white-space:pre-line;margin-bottom:14px;'>{q['answer'].strip()}</div>",
+                    f"<div style='background:{T["bg"]};border:1px solid {cat_color}40;"
+                    f"border-radius:0 0 12px 12px;padding:20px 22px;"
+                    f"margin-top:-6px;margin-bottom:8px;"
+                    f"animation:fadeInUp 0.3s ease both;'>"
+                    f"<div style='font-size:14px;color:{T["sub"]};line-height:1.9;"
+                    f"white-space:pre-line;'>{answer_lines}</div>"
+                    f"<div style='margin-top:16px;padding:12px 14px;"
+                    f"background:{T["grad_start"]};border:1px solid {T["green_br"]};"
+                    f"border-radius:8px;display:flex;justify-content:space-between;"
+                    f"align-items:center;gap:10px;'>"
+                    f"<div>"
+                    f"<div style='font-size:9px;color:{T["muted"]};text-transform:uppercase;"
+                    f"letter-spacing:0.14em;margin-bottom:4px;font-weight:700;'>Source / Inspiration</div>"
+                    f"<div style='font-size:13px;color:{T["sub"]};'>{q["source"]}</div>"
+                    f"</div>"
+                    f"<a href='{q["source_url"]}' target='_blank' "
+                    f"style='background:{cat_color};color:#fff;text-decoration:none;"
+                    f"font-size:11px;font-weight:700;padding:6px 14px;"
+                    f"border-radius:20px;white-space:nowrap;'>Watch →</a>"
+                    f"</div></div>",
                     unsafe_allow_html=True,
                 )
-                st.markdown(
-                    f"<div style='padding:10px 14px;background:{T['green_bg']};"
-                    f"border:1px solid {T['green_br']};border-radius:8px;"
-                    f"display:flex;justify-content:space-between;align-items:center;'>"
-                    f"<div><span style='font-size:10px;color:{T['muted']};text-transform:uppercase;"
-                    f"letter-spacing:0.1em;font-weight:700;display:block;margin-bottom:3px;'>Inspired by</span>"
-                    f"<span style='font-size:13px;color:{T['sub']};'>{q['source']}</span></div>"
-                    f"<a href='{q['source_url']}' target='_blank' "
-                    f"style='font-size:11px;color:{T['accent']};text-decoration:none;"
-                    f"font-weight:700;white-space:nowrap;'>Watch on YouTube →</a></div>",
-                    unsafe_allow_html=True,
-                )
-                # Tags
-                tags_html = "".join(
-                    f"<span style='display:inline-block;background:{T['bg']};border:1px solid {T['border']};"
-                    f"border-radius:20px;padding:2px 10px;font-size:10px;color:{T['muted']};"
-                    f"margin:3px;'>{tag}</span>"
-                    for tag in q.get("tags", [])
-                )
-                if tags_html:
-                    st.markdown(f"<div style='margin-top:8px;'>{tags_html}</div>", unsafe_allow_html=True)
 
     # YouTube channels section
     st.markdown(
