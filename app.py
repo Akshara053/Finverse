@@ -28,6 +28,12 @@ from database     import (
     upsert_leaderboard, get_leaderboard,
     save_challenge, get_completed_challenges,
     get_user_settings, save_user_settings, end_day_update_streak,
+    register_user, login_user, get_auth_by_username, change_password,
+    get_all_registered_users,
+    log_xp, get_total_xp_db, get_level_from_xp,
+    award_badge, get_earned_badges, ALL_BADGES,
+    check_and_award_score_badges, check_streak_badges,
+    get_xp_leaderboard, XP_ACTIONS,
 )
 from utils import (format_currency, format_months,
                    get_savings_rate_message, get_survival_message, get_risk_advice)
@@ -600,75 +606,121 @@ if st.session_state.page == "landing":
 # ONBOARDING
 # ══════════════════════════════════════════════
 if st.session_state.page == "onboard":
-    c_logo, _, c_th2 = st.columns([6, 3, 1])
-    with c_logo:
-        st.markdown(
-            f"<div style='font-size:20px;font-weight:800;color:{T['text']};padding:14px 0;"
-            f"border-bottom:1px solid {T['border']};'>FIN<span style='color:{T['accent']};'>VERSE</span></div>",
-            unsafe_allow_html=True,
-        )
+    # ══════════════════════════════════════════════
+    # AUTH PAGE — Sign In / Sign Up with Email
+    # ══════════════════════════════════════════════
+    st.markdown(
+        f"<div style='font-size:20px;font-weight:800;color:{T['text']};padding:16px 0;"
+        f"border-bottom:1px solid {T['border']};margin-bottom:32px;'>"
+        f"FIN<span style='color:{T['accent']};'>VERSE</span></div>",
+        unsafe_allow_html=True,
+    )
 
-    _, oc, _ = st.columns([1, 2, 1])
-    with oc:
-        st.markdown(f"""
-        <div style="text-align:center;margin:28px 0 24px 0;">
-            <div style="font-size:12px;color:{T['muted']};text-transform:uppercase;
-                        letter-spacing:0.16em;font-weight:700;">Quick Setup — 1 Minute</div>
-            <h2 style="font-size:22px;font-weight:800;color:{T['text']};margin:8px 0 0 0;">
-                Tell us a little about you
-            </h2>
-        </div>
-        """, unsafe_allow_html=True)
+    _, auth_col, _ = st.columns([1, 2, 1])
+    with auth_col:
+        # Tab switcher
+        auth_tab = st.session_state.get("auth_tab", "signin")
 
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        lbl("Step 1 — Your Details")
-        oa, ob = st.columns(2)
-        with oa:
-            name_in = st.text_input("Your name", placeholder="e.g. Aashi", key="ob_name")
-        with ob:
-            age_in  = st.number_input("Age", min_value=16, max_value=80, value=25, step=1)
-        city_in = st.text_input("City (optional)", placeholder="e.g. Mumbai", key="ob_city")
-        st.markdown('</div>', unsafe_allow_html=True)
+        tab_si, tab_su = st.columns(2)
+        with tab_si:
+            si_style = f"background:{T['accent']};color:#fff;" if auth_tab == "signin" else f"background:{T['surface']};color:{T['sub']};"
+            if st.button("Sign In", key="tab_signin", use_container_width=True):
+                st.session_state.auth_tab = "signin"; st.rerun()
+        with tab_su:
+            su_style = f"background:{T['accent']};color:#fff;" if auth_tab == "signup" else f"background:{T['surface']};color:{T['sub']};"
+            if st.button("Create Account", key="tab_signup", use_container_width=True):
+                st.session_state.auth_tab = "signup"; st.rerun()
 
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        lbl("Step 2 — Your Life Stage")
-        st.markdown(
-            f"<p style='font-size:12px;color:{T['muted']};margin:0 0 12px 0;'>"
-            "This sets your personalised financial targets and tips.</p>",
-            unsafe_allow_html=True,
-        )
-        selected_persona = st.radio(
-            "I am a",
-            list(PERSONAS.keys()),
-            format_func=lambda x: f"{PERSONAS[x]['icon']}  {x}",
-            index=1,
-            label_visibility="collapsed",
-        )
-        p = PERSONAS[selected_persona]
-        st.markdown(
-            f"<div style='background:{T['bg']};border:1px solid {T['border']};border-radius:8px;"
-            f"padding:11px 14px;margin-top:10px;font-size:12px;color:{T['sub']};'>"
-            f"Savings target: <span style='color:{T['accent']};font-weight:700;'>{p['savings_rate_target']}%</span>"
-            f"  ·  Emergency fund: <span style='color:{T['accent']};font-weight:700;'>{p['survival_target']} months</span>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
 
-        if st.button("ENTER FINVERSE →", key="onboard_btn"):
-            if name_in.strip():
-                un_ = name_in.strip()
-                upsert_user_profile(un_, un_, selected_persona, int(age_in), city_in)
-                st.session_state.update({
-                    "page": "app", "logged_in": True, "username": un_,
-                    "persona_name": selected_persona,
-                    "challenges_done": get_completed_challenges(un_),
-                })
-                st.rerun()
-            else:
-                st.warning("Please enter your name to continue.")
+        # ── SIGN IN ──
+        if auth_tab == "signin":
+            st.markdown(f'<div class="card">', unsafe_allow_html=True)
+            lbl("Sign In to Finverse")
+            si_identifier = st.text_input("Email or username", placeholder="you@email.com", key="si_id")
+            si_password   = st.text_input("Password", type="password", placeholder="Your password", key="si_pw")
 
-        if st.button("← Back", key="back_land"):
+            if st.button("SIGN IN", key="signin_btn"):
+                if si_identifier and si_password:
+                    result_ = login_user(si_identifier, si_password)
+                    if result_["success"]:
+                        un_ = result_["username"]
+                        settings_ = get_user_settings(un_)
+                        prof = get_user_profile(un_) or {}
+                        log_xp(un_, "score_calculated", 0)  # just to ensure xp table exists
+                        st.session_state.update({
+                            "page": "app", "logged_in": True, "username": un_,
+                            "persona_name": prof.get("persona", "Working Professional"),
+                            "challenges_done": get_completed_challenges(un_),
+                        })
+                        st.success(f"Welcome back, {un_}!")
+                        st.rerun()
+                    else:
+                        st.error(result_["error"])
+                else:
+                    st.warning("Enter your email/username and password.")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            st.markdown(
+                f"<p style='text-align:center;font-size:12px;color:{T['muted']};margin-top:10px;'>"
+                f"Don't have an account? Click <strong>Create Account</strong> above.</p>",
+                unsafe_allow_html=True,
+            )
+
+        # ── SIGN UP ──
+        else:
+            st.markdown(f'<div class="card">', unsafe_allow_html=True)
+            lbl("Create Your Account")
+
+            su1, su2 = st.columns(2)
+            with su1:
+                su_name  = st.text_input("Your name", placeholder="e.g. Aashi", key="su_name")
+            with su2:
+                su_age   = st.number_input("Age", min_value=16, max_value=80, value=25, step=1)
+            su_email    = st.text_input("Email address", placeholder="you@email.com", key="su_email")
+            su_city     = st.text_input("City (optional)", placeholder="e.g. Mumbai", key="su_city")
+            su_pw1      = st.text_input("Password", type="password", placeholder="Minimum 6 characters", key="su_pw1")
+            su_pw2      = st.text_input("Confirm password", type="password", placeholder="Repeat password", key="su_pw2")
+
+            st.markdown(f"<div style='margin:10px 0 6px 0;'><span class='lbl'>Your Life Stage</span></div>", unsafe_allow_html=True)
+            su_persona = st.radio(
+                "Profile type",
+                list(PERSONAS.keys()),
+                format_func=lambda x: f"{PERSONAS[x]['icon']}  {x}",
+                index=1,
+                horizontal=True,
+                label_visibility="collapsed",
+            )
+
+            if st.button("CREATE ACCOUNT", key="signup_btn"):
+                if not su_name.strip():
+                    st.error("Enter your name.")
+                elif not su_email:
+                    st.error("Enter your email address.")
+                elif su_pw1 != su_pw2:
+                    st.error("Passwords do not match.")
+                elif len(su_pw1) < 6:
+                    st.error("Password must be at least 6 characters.")
+                else:
+                    reg = register_user(su_name.strip(), su_email, su_pw1)
+                    if reg["success"]:
+                        un_ = reg["username"]
+                        upsert_user_profile(un_, un_, su_persona, int(su_age), su_city)
+                        award_badge(un_, "profile_done")
+                        log_xp(un_, "profile_completed")
+                        settings_ = get_user_settings(un_)
+                        st.session_state.update({
+                            "page": "app", "logged_in": True, "username": un_,
+                            "persona_name": su_persona,
+                            "challenges_done": get_completed_challenges(un_),
+                        })
+                        st.success(f"Account created! Welcome to Finverse, {un_}.")
+                        st.rerun()
+                    else:
+                        st.error(reg["error"])
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        if st.button("← Back to home", key="back_land"):
             st.session_state.page = "landing"
             st.rerun()
     st.stop()
@@ -684,17 +736,24 @@ un       = st.session_state.username
 persona  = PERSONAS[st.session_state.persona_name]
 profile  = get_user_profile(un) or {}
 settings_= get_user_settings(un)
-xp_total = get_total_xp(st.session_state.get("challenges_done", set()))
+xp_total = get_total_xp_db(un)
+lv_xp    = get_level_from_xp(xp_total)
 
 # ── APP HEADER ──────────────────────────────
 h_logo, h_space, h_th1, h_th2, h_th3 = st.columns([4, 4, 1, 1, 1])
 with h_logo:
+    lv_hdr = get_level_from_xp(xp_total)
     st.markdown(
-        f"<div style='font-size:20px;font-weight:800;color:{T['text']};padding:16px 0 16px 0;"
-        f"border-bottom:1px solid {T['border']};'>"
-        f"FIN<span style='color:{T['accent']};'>VERSE</span>"
+        f"<div style='font-size:20px;font-weight:800;color:{T['text']};padding:14px 0;"
+        f"border-bottom:1px solid {T['border']};display:flex;align-items:center;"
+        f"justify-content:space-between;'>"
+        f"<span>FIN<span style='color:{T['accent']};'>VERSE</span>"
         f"<span style='font-size:11px;color:{T['muted']};font-weight:400;margin-left:12px;'>"
-        f"Hello, {un}</span></div>",
+        f"Hello, {un}</span></span>"
+        f"<span style='font-size:11px;color:{T['muted']};font-weight:600;'>"
+        f"{lv_hdr['icon']} {lv_hdr['name']} &nbsp;·&nbsp; "
+        f"<span style='color:{T['accent']};'>{xp_total} XP</span></span>"
+        f"</div>",
         unsafe_allow_html=True,
     )
 with h_th1:
@@ -765,6 +824,11 @@ with t_score:
             "last_result": result, "last_income": income,
             "last_expenses": expenses, "last_savings": savings,
         })
+        # Auto-award badges and log XP
+        hist_for_badges = get_score_history(un, 10)
+        new_bgs = check_and_award_score_badges(un, score, risk, result, hist_for_badges)
+        if new_bgs:
+            st.session_state["new_badges"] = new_bgs
 
         # Score card
         st.markdown('<div class="card-grad">', unsafe_allow_html=True)
@@ -971,7 +1035,7 @@ with t_dash:
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(x=d_["dates"], y=d_["scores"], mode="lines+markers",
                     line={"color":T['accent'],"width":2.5}, marker={"color":T['accent'],"size":7},
-                    fill="tozeroy", fillcolor=f"{T['accent']}10"))
+                    fill="tozeroy", fillcolor="rgba(34,197,94,0.07)"))
                 fig.add_hline(y=65, line_dash="dot", line_color=T['muted'],
                               annotation_text="Safe zone", annotation_font_color=T['muted'])
                 fig.update_layout(**plotly_cfg(), height=230)
@@ -1013,7 +1077,7 @@ with t_dash:
                         fig4 = go.Figure(go.Scatter(x=dp["months"], y=dp["savings"],
                             mode="lines+markers", line={"color":"#3b82f6","width":2,"dash":"dot"},
                             marker={"color":"#3b82f6","size":5},
-                            fill="tozeroy", fillcolor="#3b82f610"))
+                            fill="tozeroy", fillcolor="rgba(59,130,246,0.07)"))
                         fig4.update_layout(**plotly_cfg(), height=260)
                         st.plotly_chart(fig4, use_container_width=True, config={"displayModeBar":False})
                         st.markdown('</div>', unsafe_allow_html=True)
@@ -1062,7 +1126,8 @@ with t_track:
     if st.button("ADD EXPENSE", key="add_exp"):
         if amt > 0:
             save_expense(un, cat, float(amt), note, str(exp_date))
-            st.success(f"Added: {cat}  —  {format_currency(amt)}")
+            log_xp(un, "expense_logged")
+            st.success(f"Added: {cat}  —  {format_currency(amt)}  (+2 XP)")
             st.rerun()
         else:
             st.warning("Enter an amount greater than ₹0.")
@@ -1109,7 +1174,9 @@ with t_track:
         st.markdown(f"<hr style='border-color:{T['border']};margin:12px 0;'>", unsafe_allow_html=True)
         if st.button("END DAY — SAVE STREAK", use_container_width=True):
             new_streak = end_day_update_streak(un)
-            st.success(f"Day saved! Streak: {new_streak} days."); st.rerun()
+            new_bgs_str = check_streak_badges(un, new_streak)
+            badge_msg = f" +Badge: {new_bgs_str[0]}!" if new_bgs_str else ""
+            st.success(f"Day saved! Streak: {new_streak} days.{badge_msg}"); st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
         monthly = get_monthly_expenses(un)
@@ -1179,7 +1246,8 @@ with t_lend:
             t  = "gave" if "gave" in txn_type else "owe"
             dd = str(due_date) if due_date else None
             add_lend_borrow(un, party.strip(), float(l_amt), t, desc, dd)
-            st.success(f"Recorded: {format_currency(l_amt)} {'given to' if t=='gave' else 'borrowed from'} {party}.")
+            log_xp(un, "lend_added")
+            st.success(f"Recorded: {format_currency(l_amt)} {'given to' if t=='gave' else 'borrowed from'} {party}.  (+5 XP)")
             st.rerun()
         else:
             st.warning("Enter a name and amount greater than ₹0.")
@@ -1214,7 +1282,9 @@ with t_lend:
                 st.markdown(f"<span style='font-size:12px;color:{T['sub']};'>{label}</span>", unsafe_allow_html=True)
             with t4:
                 if st.button("Settle", key=f"set_{txn['id']}"):
-                    settle_lend_borrow(txn["id"]); st.rerun()
+                    settle_lend_borrow(txn["id"])
+                    log_xp(un, "lend_settled")
+                    st.rerun()
             with t5:
                 if st.button("Del", key=f"dlt_{txn['id']}"):
                     delete_lend_borrow(txn["id"]); st.rerun()
@@ -1343,7 +1413,17 @@ with t_learn:
                 if not is_done:
                     if st.button(f"Mark complete  +{xp_val} XP", key=f"mod_{mod.get('id',title)}"):
                         mark_module_complete(un, mod.get("id", title))
-                        st.success("Module complete!")
+                        log_xp(un, "module_completed")
+                        award_badge(un, "first_module")
+                        # Check all-beginner badge
+                        prog_ = get_education_progress(un)
+                        done_ = {mid for mid, d in prog_.items() if d}
+                        beg_ids = [m.get("id") for m in LEARNING_MODULES if m.get("level")=="Beginner"]
+                        if all(b in done_ for b in beg_ids):
+                            award_badge(un, "all_beginner")
+                        if len(done_) >= len(LEARNING_MODULES):
+                            award_badge(un, "all_modules")
+                        st.success(f"Module complete! +{xp_val} XP earned.")
                         st.rerun()
                 else:
                     st.markdown(f"<span style='font-size:11px;color:{T['accent']};'>✓ Completed</span>", unsafe_allow_html=True)
@@ -1418,7 +1498,9 @@ with t_comm:
         if st.button("PUBLISH", key="post_btn"):
             if len(np_text.strip()) >= 20:
                 add_post(un, un, np_topic, np_text.strip(), np_anon)
-                st.success("Post published."); st.rerun()
+                log_xp(un, "post_published")
+                award_badge(un, "first_post")
+                st.success("Post published! +8 XP"); st.rerun()
             else:
                 st.warning("Write at least 20 characters.")
 
@@ -1519,6 +1601,33 @@ with t_insights:
         st.markdown(f"<p style='font-size:12px;color:{T['muted']};'>No scores yet. Calculate yours first.</p>", unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # XP Leaderboard (engagement-based)
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    lbl("XP Leaderboard — Most Engaged Users")
+    xp_lb = get_xp_leaderboard(15)
+    if xp_lb:
+        for i, e in enumerate(xp_lb):
+            is_me_xp = e["username"] == un
+            bg_xp    = T["green_bg"] if is_me_xp else T["surface"]
+            br_xp    = f"1px solid {T['green_br']}" if is_me_xp else f"1px solid {T['border']}"
+            rank_xp  = f"0{i+1}" if i+1 < 10 else str(i+1)
+            lv_xp_u  = get_level_from_xp(e["total_xp"])
+            st.markdown(
+                f"<div style='background:{bg_xp};border:{br_xp};border-radius:10px;"
+                f"display:flex;align-items:center;gap:12px;padding:10px 14px;margin-bottom:5px;'>"
+                f"<span style='font-family:Space Mono,monospace;font-size:12px;color:{T['muted']};width:28px;'>{rank_xp}</span>"
+                f"<span style='font-size:18px;'>{lv_xp_u['icon']}</span>"
+                f"<span style='flex:1;font-size:13px;color:{T['text'] if is_me_xp else T['sub']};font-weight:{'700' if is_me_xp else '400'};'>"
+                f"{e['username']}{'  (you)' if is_me_xp else ''}</span>"
+                f"<span style='font-size:10px;color:{T['muted']};margin-right:8px;'>{lv_xp_u['name']}</span>"
+                f"<span style='font-family:Space Mono,monospace;font-size:16px;color:{T['accent']};font-weight:700;'>{e['total_xp']}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+    else:
+        st.markdown(f"<p style='font-size:12px;color:{T['muted']};margin:0;'>Earn XP by using the app. Start by calculating your score.</p>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
     # Survey
     SURVEY_Q    = "What is your biggest financial challenge right now?"
     SURVEY_OPTS = ["Not saving enough each month","Too much debt or EMIs","No emergency fund",
@@ -1531,7 +1640,8 @@ with t_insights:
         answer = st.radio("Pick your answer", SURVEY_OPTS, label_visibility="collapsed")
         if st.button("SUBMIT", key="survey_btn"):
             save_survey_response(un, SURVEY_Q, answer)
-            st.success("Thank you. Response recorded."); st.rerun()
+            log_xp(un, "survey_answered")
+            st.success("Response recorded! +10 XP"); st.rerun()
     else:
         responses = get_survey_responses(SURVEY_Q)
         total_r   = max(len(responses), 1)
@@ -1617,12 +1727,86 @@ with t_me:
         fig5 = go.Figure()
         fig5.add_trace(go.Scatter(x=d3_["dates"], y=d3_["scores"], mode="lines+markers",
             line={"color":T['accent'],"width":2.5}, marker={"color":T['accent'],"size":7},
-            fill="tozeroy", fillcolor=f"{T['accent']}10"))
+            fill="tozeroy", fillcolor="rgba(34,197,94,0.07)"))
         fig5.add_hline(y=65, line_dash="dot", line_color=T['muted'],
                        annotation_text="Safe zone")
         fig5.update_layout(**plotly_cfg(), height=220)
         st.plotly_chart(fig5, use_container_width=True, config={"displayModeBar":False})
         st.markdown('</div>', unsafe_allow_html=True)
+
+    # Full Badge Showcase
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    lbl("Badge Collection")
+    all_badges_info = get_earned_badges(un)
+    earned_count    = sum(1 for b in all_badges_info if b["earned"])
+    st.markdown(
+        f"<div style='font-size:12px;color:{T['muted']};margin-bottom:14px;'>"
+        f"{earned_count} / {len(ALL_BADGES)} badges earned</div>",
+        unsafe_allow_html=True,
+    )
+    bg1, bg2 = st.columns(2)
+    for i, badge in enumerate(all_badges_info):
+        col_ = bg1 if i % 2 == 0 else bg2
+        with col_:
+            earned    = badge["earned"]
+            bg_color  = T["green_bg"]  if earned else T["surface"]
+            br_color  = T["green_br"]  if earned else T["border"]
+            txt_color = T["text"]      if earned else T["muted"]
+            sub_color = T["sub"]       if earned else T["border"]
+            earned_lbl = f"<span style='font-size:9px;color:{T['accent']};'>{badge['earned_at'][:10] if badge.get('earned_at') else ''}</span>" if earned else ""
+            st.markdown(
+                f"<div style='background:{bg_color};border:1px solid {br_color};"
+                f"border-radius:8px;padding:9px 12px;margin-bottom:7px;display:flex;"
+                f"align-items:center;gap:10px;opacity:{'1' if earned else '0.4'}'>"
+                f"<div style='font-size:10px;font-weight:700;letter-spacing:0.06em;"
+                f"color:{txt_color}'>{badge['name']}</div>"
+                f"<div style='flex:1;font-size:10px;color:{sub_color};'>{badge['desc']}</div>"
+                f"<div style='font-size:9px;color:{T['accent']};white-space:nowrap;font-weight:700;'>"
+                f"+{badge['xp']} XP</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # XP Level Progress
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    lbl("XP Progress")
+    lv_info = get_level_from_xp(xp_total)
+    st.markdown(
+        f"<div style='display:flex;align-items:center;gap:16px;margin-bottom:14px;'>"
+        f"<div style='font-size:40px;'>{lv_info['icon']}</div>"
+        f"<div>"
+        f"<div style='font-size:20px;font-weight:800;color:{T['text']};'>{lv_info['name']} Level</div>"
+        f"<div style='font-family:Space Mono,monospace;font-size:16px;color:{T['accent']};margin-top:2px;'>{xp_total} XP total</div>"
+        f"</div></div>",
+        unsafe_allow_html=True,
+    )
+    if lv_info["next"]:
+        pct = lv_info["progress_pct"]
+        st.markdown(
+            f"<div style='font-size:11px;color:{T['muted']};margin-bottom:4px;'>"
+            f"{lv_info['next']['xp_needed']} XP to {lv_info['next']['icon']} {lv_info['next']['name']}"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown(bar(pct), unsafe_allow_html=True)
+    else:
+        st.success("Maximum level reached — Legend!")
+
+    # XP breakdown
+    with st.expander("How to earn more XP"):
+        for action, xp_val in XP_ACTIONS.items():
+            if xp_val > 0:
+                action_label = action.replace("_", " ").title()
+                st.markdown(
+                    f"<div style='display:flex;justify-content:space-between;padding:5px 0;"
+                    f"border-bottom:1px solid {T['border']};font-size:12px;'>"
+                    f"<span style='color:{T['sub']};'>{action_label}</span>"
+                    f"<span style='font-family:Space Mono,monospace;color:{T['accent']};font-weight:700;'>+{xp_val} XP</span>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # Challenges
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -1667,6 +1851,35 @@ with t_me:
     else:
         st.caption("Calculate your score first to get a shareable message.")
     st.markdown('</div>', unsafe_allow_html=True)
+
+    # Change Password
+    auth_info = get_auth_by_username(un)
+    if auth_info:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        lbl("Account Info")
+        st.markdown(
+            f"<div style='margin-bottom:12px;'>"
+            f"<div style='font-size:11px;color:{T['muted']};text-transform:uppercase;letter-spacing:0.1em;margin-bottom:3px;'>Email</div>"
+            f"<div style='font-size:14px;color:{T['text']};font-weight:600;'>{auth_info.get('email','—')}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+        with st.expander("Change Password"):
+            cp_old  = st.text_input("Current password", type="password", key="cp_old")
+            cp_new1 = st.text_input("New password (min 6 chars)", type="password", key="cp_new1")
+            cp_new2 = st.text_input("Confirm new password", type="password", key="cp_new2")
+            if st.button("UPDATE PASSWORD", key="cp_btn"):
+                if cp_new1 != cp_new2:
+                    st.error("New passwords do not match.")
+                elif len(cp_new1) < 6:
+                    st.error("New password must be at least 6 characters.")
+                else:
+                    res_cp = change_password(un, cp_old, cp_new1)
+                    if res_cp["success"]:
+                        st.success("Password updated successfully.")
+                    else:
+                        st.error(res_cp["error"])
+        st.markdown('</div>', unsafe_allow_html=True)
 
     if st.button("SIGN OUT", key="me_signout"):
         for k in list(st.session_state.keys()):

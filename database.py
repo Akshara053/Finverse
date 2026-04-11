@@ -65,6 +65,8 @@ def init_db():
         "ALTER TABLE user_profiles ADD COLUMN city TEXT DEFAULT ''",
         "ALTER TABLE lend_borrow ADD COLUMN due_date TEXT DEFAULT NULL",
         "ALTER TABLE lend_borrow ADD COLUMN settled_at TEXT DEFAULT NULL",
+        "ALTER TABLE user_profiles ADD COLUMN email TEXT DEFAULT ''",
+        "ALTER TABLE user_profiles ADD COLUMN total_xp INTEGER DEFAULT 0",
     ]
     for migration in migrations:
         try:
@@ -72,6 +74,51 @@ def init_db():
             conn.commit()
         except Exception:
             pass  # Column already exists — safe to skip
+
+
+    # ── USER AUTH ─────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS user_auth (
+            username     TEXT PRIMARY KEY,
+            email        TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at   TEXT DEFAULT (datetime('now','localtime')),
+            last_login   TEXT DEFAULT NULL,
+            is_verified  INTEGER DEFAULT 1
+        )
+    """)
+
+    # ── XP LOG ────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS xp_log (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            username   TEXT NOT NULL,
+            action     TEXT NOT NULL,
+            xp_earned  INTEGER NOT NULL,
+            created_at TEXT DEFAULT (datetime('now','localtime'))
+        )
+    """)
+
+    # ── DAILY STREAKS ─────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS streak_log (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            username   TEXT NOT NULL,
+            log_date   TEXT NOT NULL,
+            action     TEXT NOT NULL DEFAULT 'expense_tracked',
+            UNIQUE(username, log_date, action)
+        )
+    """)
+
+    # ── BADGES EARNED ─────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS badges_earned (
+            username   TEXT NOT NULL,
+            badge_name TEXT NOT NULL,
+            earned_at  TEXT DEFAULT (datetime('now','localtime')),
+            PRIMARY KEY (username, badge_name)
+        )
+    """)
 
     # ── DAILY EXPENSES ────────────────────────────
     c.execute("""
@@ -631,3 +678,350 @@ def end_day_update_streak(username):
         streak += 1
     save_user_settings(username, settings["daily_budget"], streak, today)
     return streak
+
+
+# ══════════════════════════════════════════════
+# AUTH — EMAIL + PASSWORD LOGIN
+# ══════════════════════════════════════════════
+import hashlib
+import secrets
+
+
+def _hash_password(password: str, salt: str = "") -> str:
+    """SHA-256 hash with salt. Not bcrypt but sufficient for this use case."""
+    combined = password + salt + "finverse_salt_2025"
+    return hashlib.sha256(combined.encode()).hexdigest()
+
+
+def register_user(username: str, email: str, password: str) -> dict:
+    """
+    Register a new user with email + password.
+    Returns {"success": True} or {"success": False, "error": "..."}
+    """
+    if len(password) < 6:
+        return {"success": False, "error": "Password must be at least 6 characters."}
+    if "@" not in email or "." not in email:
+        return {"success": False, "error": "Enter a valid email address."}
+    if len(username.strip()) < 2:
+        return {"success": False, "error": "Username must be at least 2 characters."}
+
+    conn = get_conn()
+    # Check username taken
+    if conn.execute("SELECT 1 FROM user_auth WHERE username=?", (username,)).fetchone():
+        conn.close()
+        return {"success": False, "error": "Username already taken. Choose another."}
+    # Check email taken
+    if conn.execute("SELECT 1 FROM user_auth WHERE email=?", (email.lower(),)).fetchone():
+        conn.close()
+        return {"success": False, "error": "Email already registered. Please sign in."}
+
+    pw_hash = _hash_password(password)
+    try:
+        conn.execute(
+            "INSERT INTO user_auth (username, email, password_hash) VALUES (?,?,?)",
+            (username.strip(), email.lower().strip(), pw_hash)
+        )
+        conn.commit()
+    except Exception as e:
+        conn.close()
+        return {"success": False, "error": str(e)}
+    conn.close()
+
+    # Create profile
+    upsert_user_profile(username.strip(), username.strip())
+    return {"success": True, "username": username.strip()}
+
+
+def login_user(identifier: str, password: str) -> dict:
+    """
+    Login with email or username + password.
+    Returns {"success": True, "username": ...} or {"success": False, "error": ...}
+    """
+    conn = get_conn()
+    # Try by email first, then username
+    row = conn.execute(
+        "SELECT * FROM user_auth WHERE email=? OR username=?",
+        (identifier.lower().strip(), identifier.strip())
+    ).fetchone()
+    conn.close()
+
+    if not row:
+        return {"success": False, "error": "No account found with that email or username."}
+
+    pw_hash = _hash_password(password)
+    if row["password_hash"] != pw_hash:
+        return {"success": False, "error": "Incorrect password. Please try again."}
+
+    # Update last_login
+    conn = get_conn()
+    conn.execute(
+        "UPDATE user_auth SET last_login=datetime('now','localtime') WHERE username=?",
+        (row["username"],)
+    )
+    conn.commit()
+    conn.close()
+    return {"success": True, "username": row["username"], "email": row["email"]}
+
+
+def get_auth_by_username(username: str) -> dict:
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM user_auth WHERE username=?", (username,)).fetchone()
+    conn.close()
+    return dict(row) if row else {}
+
+
+def change_password(username: str, old_password: str, new_password: str) -> dict:
+    if len(new_password) < 6:
+        return {"success": False, "error": "New password must be at least 6 characters."}
+    conn = get_conn()
+    row  = conn.execute("SELECT password_hash FROM user_auth WHERE username=?", (username,)).fetchone()
+    conn.close()
+    if not row:
+        return {"success": False, "error": "User not found."}
+    if row["password_hash"] != _hash_password(old_password):
+        return {"success": False, "error": "Current password is incorrect."}
+    conn = get_conn()
+    conn.execute("UPDATE user_auth SET password_hash=? WHERE username=?",
+                 (_hash_password(new_password), username))
+    conn.commit()
+    conn.close()
+    return {"success": True}
+
+
+def get_all_registered_users() -> list:
+    """Admin — all registered accounts with metadata."""
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT a.username, a.email, a.created_at, a.last_login,
+               COUNT(DISTINCT s.id) as score_count,
+               MAX(s.score) as best_score
+        FROM user_auth a
+        LEFT JOIN score_history s ON s.username = a.username
+        GROUP BY a.username
+        ORDER BY a.created_at DESC
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ══════════════════════════════════════════════
+# GAMIFICATION — XP, BADGES, LEVELS
+# ══════════════════════════════════════════════
+
+XP_ACTIONS = {
+    "score_calculated":      10,
+    "expense_logged":         2,
+    "expense_logged_7day":   15,   # bonus for 7-day streak
+    "lend_added":             5,
+    "lend_settled":          10,
+    "challenge_completed":   25,
+    "module_completed":      30,
+    "post_published":         8,
+    "post_upvoted":           3,
+    "survey_answered":       10,
+    "profile_completed":     20,
+    "first_safe_score":      50,
+    "first_emergency_fund":  75,
+    "score_improved_5pts":   20,
+    "streak_7days":          30,
+    "streak_30days":         75,
+    "streak_100days":       200,
+}
+
+LEVEL_THRESHOLDS = [
+    (0,    "Starter",   "🌱"),
+    (100,  "Bronze",    "🥉"),
+    (300,  "Silver",    "🥈"),
+    (600,  "Gold",      "🥇"),
+    (1000, "Platinum",  "💎"),
+    (2000, "Diamond",   "💠"),
+    (5000, "Legend",    "🏆"),
+]
+
+ALL_BADGES = [
+    # Score badges
+    {"id": "first_score",     "name": "First Steps",        "desc": "Calculated your first safety score",    "xp": 10},
+    {"id": "safe_zone",       "name": "Safe Zone",          "desc": "Achieved a SAFE rating",                "xp": 50},
+    {"id": "score_80",        "name": "Finance Pro",        "desc": "Scored 80+ on safety score",            "xp": 75},
+    {"id": "score_90",        "name": "Money Master",       "desc": "Scored 90+ on safety score",            "xp": 100},
+    {"id": "consistent_safe", "name": "Consistently Safe",  "desc": "Maintained SAFE rating 5 times",        "xp": 80},
+    # Savings badges
+    {"id": "saver_10",        "name": "Saver Seedling",     "desc": "Savings rate above 10%",                "xp": 20},
+    {"id": "saver_20",        "name": "Good Saver",         "desc": "Savings rate above 20%",                "xp": 40},
+    {"id": "saver_30",        "name": "Super Saver",        "desc": "Savings rate above 30%",                "xp": 60},
+    # Emergency fund
+    {"id": "ef_3month",       "name": "Safety Net",         "desc": "3 months emergency fund",               "xp": 40},
+    {"id": "ef_6month",       "name": "Emergency Ready",    "desc": "6 months emergency fund",               "xp": 80},
+    {"id": "ef_12month",      "name": "Financial Fortress", "desc": "12 months emergency fund",              "xp": 150},
+    # Streak badges
+    {"id": "streak_3",        "name": "Habit Forming",      "desc": "3-day tracking streak",                 "xp": 15},
+    {"id": "streak_7",        "name": "Week Warrior",       "desc": "7-day tracking streak",                 "xp": 30},
+    {"id": "streak_30",       "name": "Monthly Champion",   "desc": "30-day tracking streak",                "xp": 75},
+    # Learning badges
+    {"id": "first_module",    "name": "Curious Mind",       "desc": "Completed first learning module",       "xp": 20},
+    {"id": "all_beginner",    "name": "Finance Student",    "desc": "Completed all Beginner modules",        "xp": 60},
+    {"id": "all_modules",     "name": "Finance Scholar",    "desc": "Completed all learning modules",        "xp": 150},
+    # Community
+    {"id": "first_post",      "name": "Voice of Community", "desc": "Published first community post",        "xp": 15},
+    {"id": "helpful_10",      "name": "Helpful Member",     "desc": "Received 10 upvotes total",             "xp": 40},
+    # Lend/Borrow
+    {"id": "debt_free",       "name": "Debt Free",          "desc": "Settled all pending debts",             "xp": 50},
+    # Special
+    {"id": "profile_done",    "name": "Fully Onboarded",    "desc": "Completed your full profile",           "xp": 20},
+    {"id": "week1",           "name": "One Week Old",       "desc": "Member for 7 days",                     "xp": 25},
+    {"id": "month1",          "name": "One Month Strong",   "desc": "Member for 30 days",                    "xp": 50},
+]
+
+
+def log_xp(username: str, action: str, custom_xp: int = None) -> int:
+    """Log an XP-earning action. Returns XP earned."""
+    xp = custom_xp if custom_xp is not None else XP_ACTIONS.get(action, 0)
+    if xp <= 0:
+        return 0
+    conn = get_conn()
+    conn.execute(
+        "INSERT INTO xp_log (username, action, xp_earned) VALUES (?,?,?)",
+        (username, action, xp)
+    )
+    conn.commit()
+    conn.close()
+    return xp
+
+
+def get_total_xp_db(username: str) -> int:
+    """Get total XP from database (more accurate than session state)."""
+    conn = get_conn()
+    row  = conn.execute(
+        "SELECT COALESCE(SUM(xp_earned),0) as total FROM xp_log WHERE username=?",
+        (username,)
+    ).fetchone()
+    conn.close()
+    return int(row["total"]) if row else 0
+
+
+def get_level_from_xp(xp: int) -> dict:
+    """Return level info based on total XP."""
+    current = LEVEL_THRESHOLDS[0]
+    for threshold, name, icon in LEVEL_THRESHOLDS:
+        if xp >= threshold:
+            current = (threshold, name, icon)
+    # Next level
+    idx = [t[0] for t in LEVEL_THRESHOLDS].index(current[0])
+    if idx < len(LEVEL_THRESHOLDS) - 1:
+        next_thresh = LEVEL_THRESHOLDS[idx + 1]
+        xp_to_next  = next_thresh[0] - xp
+        next_info   = {"name": next_thresh[1], "icon": next_thresh[2], "xp_needed": xp_to_next, "threshold": next_thresh[0]}
+    else:
+        next_info = None
+    return {
+        "name":       current[1],
+        "icon":       current[2],
+        "threshold":  current[0],
+        "xp":         xp,
+        "next":       next_info,
+        "progress_pct": int((xp - current[0]) / (next_info["threshold"] - current[0]) * 100) if next_info else 100,
+    }
+
+
+def award_badge(username: str, badge_id: str) -> bool:
+    """Award a badge if not already earned. Returns True if newly awarded."""
+    conn = get_conn()
+    existing = conn.execute(
+        "SELECT 1 FROM badges_earned WHERE username=? AND badge_name=?",
+        (username, badge_id)
+    ).fetchone()
+    if existing:
+        conn.close()
+        return False
+    conn.execute(
+        "INSERT INTO badges_earned (username, badge_name) VALUES (?,?)",
+        (username, badge_id)
+    )
+    conn.commit()
+    conn.close()
+    # Log XP for badge
+    badge = next((b for b in ALL_BADGES if b["id"] == badge_id), None)
+    if badge:
+        log_xp(username, f"badge_{badge_id}", badge["xp"])
+    return True
+
+
+def get_earned_badges(username: str) -> list:
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT badge_name, earned_at FROM badges_earned WHERE username=? ORDER BY earned_at DESC",
+        (username,)
+    ).fetchall()
+    conn.close()
+    earned_ids = {r["badge_name"] for r in rows}
+    earned_at  = {r["badge_name"]: r["earned_at"] for r in rows}
+    return [
+        {**b, "earned": b["id"] in earned_ids, "earned_at": earned_at.get(b["id"])}
+        for b in ALL_BADGES
+    ]
+
+
+def check_and_award_score_badges(username: str, score: float, risk_level: str, result: dict, history: list):
+    """Auto-check and award all score-related badges."""
+    new_badges = []
+    if award_badge(username, "first_score"):
+        new_badges.append("first_score")
+    if risk_level == "SAFE" and award_badge(username, "safe_zone"):
+        new_badges.append("safe_zone")
+    if score >= 80 and award_badge(username, "score_80"):
+        new_badges.append("score_80")
+    if score >= 90 and award_badge(username, "score_90"):
+        new_badges.append("score_90")
+    safe_count = sum(1 for h in history if h.get("risk_level") == "SAFE")
+    if safe_count >= 5 and award_badge(username, "consistent_safe"):
+        new_badges.append("consistent_safe")
+    sr = result.get("savings_rate", 0)
+    if sr >= 10 and award_badge(username, "saver_10"):
+        new_badges.append("saver_10")
+    if sr >= 20 and award_badge(username, "saver_20"):
+        new_badges.append("saver_20")
+    if sr >= 30 and award_badge(username, "saver_30"):
+        new_badges.append("saver_30")
+    sm = result.get("survival_months", 0)
+    if sm >= 3  and award_badge(username, "ef_3month"):
+        new_badges.append("ef_3month")
+    if sm >= 6  and award_badge(username, "ef_6month"):
+        new_badges.append("ef_6month")
+    if sm >= 12 and award_badge(username, "ef_12month"):
+        new_badges.append("ef_12month")
+    # Score improved
+    if len(history) >= 2 and (score - history[1].get("score", score)) >= 5:
+        log_xp(username, "score_improved_5pts")
+    log_xp(username, "score_calculated")
+    return new_badges
+
+
+def check_streak_badges(username: str, streak: int):
+    new_badges = []
+    if streak >= 3  and award_badge(username, "streak_3"):
+        new_badges.append("streak_3")
+    if streak >= 7:
+        if award_badge(username, "streak_7"):
+            new_badges.append("streak_7")
+        log_xp(username, "streak_7days")
+    if streak >= 30:
+        if award_badge(username, "streak_30"):
+            new_badges.append("streak_30")
+        log_xp(username, "streak_30days")
+    return new_badges
+
+
+def get_xp_leaderboard(limit: int = 20) -> list:
+    """Leaderboard ranked by total XP (engagement, not just score)."""
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT username, SUM(xp_earned) as total_xp, COUNT(*) as actions
+        FROM xp_log
+        GROUP BY username
+        ORDER BY total_xp DESC
+        LIMIT ?
+    """, (limit,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
