@@ -54,6 +54,17 @@ except Exception:
     LEARNING_MODULES = []; BOOK_LIST = []; FREE_RESOURCES = []
     def get_modules_by_level(): return {}
 
+# Finance knowledge base import
+try:
+    from finance_knowledge import (FINANCE_QA, CURRENT_AFFAIRS, YOUTUBE_CHANNELS,
+                                    get_qa_by_category, search_qa,
+                                    ALL_QA_CATEGORIES, ALL_CA_CATEGORIES)
+except Exception:
+    FINANCE_QA = []; CURRENT_AFFAIRS = []; YOUTUBE_CHANNELS = []
+    def get_qa_by_category(): return {}
+    def search_qa(q): return []
+    ALL_QA_CATEGORIES = []; ALL_CA_CATEGORIES = []
+
 try:
     import plotly.graph_objects as go
     PLOTLY = True
@@ -146,6 +157,7 @@ def get_css(T):
 
 *, html, body, [class*="css"] {{
     font-family: 'Plus Jakarta Sans', sans-serif !important;
+    font-size: 15px !important;
 }}
 #MainMenu, footer, header {{ visibility: hidden; }}
 .stApp {{ background: {T['bg']}; }}
@@ -284,11 +296,145 @@ label {{ font-size:10px !important; font-weight:700 !important; color:{T['muted'
 [data-testid="stAlert"] {{ background:{T['surface']} !important; border:1px solid {T['border']} !important; border-radius:9px !important; font-size:13px !important; }}
 
 /* EXPANDER */
-.streamlit-expanderHeader {{ background:{T['surface']} !important; border:1px solid {T['border']} !important; border-radius:9px !important; color:{T['sub']} !important; font-size:13px !important; font-weight:600 !important; }}
+/* EXPANDER — fix _arrow_right bleed-through */
+[data-testid="stExpander"] details {{
+    background: {T['surface']} !important;
+    border: 1px solid {T['border']} !important;
+    border-radius: 10px !important;
+    margin-bottom: 8px !important;
+}}
+[data-testid="stExpander"] summary {{
+    background: {T['surface']} !important;
+    border-radius: 10px !important;
+    padding: 12px 16px !important;
+    color: {T['sub']} !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    list-style: none !important;
+}}
+[data-testid="stExpander"] summary::-webkit-details-marker {{
+    display: none !important;
+}}
+[data-testid="stExpander"] summary > div > div > p {{
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: {T['sub']} !important;
+}}
+[data-testid="stExpander"] [data-testid="stExpanderDetails"] {{
+    background: {T['bg']} !important;
+    border-top: 1px solid {T['border']} !important;
+    padding: 14px 16px !important;
+    color: {T['sub']} !important;
+}}
+/* Hide the raw SVG arrow text fallback */
+.streamlit-expanderHeader {{ 
+    background:{T['surface']} !important; 
+    border:1px solid {T['border']} !important; 
+    border-radius:9px !important; 
+    color:{T['sub']} !important; 
+    font-size:14px !important; 
+    font-weight:600 !important; 
+}}
+.streamlit-expanderContent {{ 
+    background:{T['bg']} !important; 
+    border:1px solid {T['border']} !important; 
+    border-top:none !important;
+    border-radius:0 0 9px 9px !important; 
+    padding: 14px 16px !important;
+}}
 
 ::-webkit-scrollbar {{ width:3px; height:3px; background:transparent; }}
 ::-webkit-scrollbar-thumb {{ background:{T['border']}; border-radius:3px; }}
 hr {{ border-color:{T['border']} !important; }}
+
+/* ── ANIMATIONS ── */
+@keyframes fadeInUp {{
+    from {{ opacity: 0; transform: translateY(16px); }}
+    to   {{ opacity: 1; transform: translateY(0); }}
+}}
+@keyframes fadeIn {{
+    from {{ opacity: 0; }}
+    to   {{ opacity: 1; }}
+}}
+@keyframes slideInLeft {{
+    from {{ opacity: 0; transform: translateX(-20px); }}
+    to   {{ opacity: 1; transform: translateX(0); }}
+}}
+@keyframes pulse {{
+    0%, 100% {{ transform: scale(1); }}
+    50%  {{ transform: scale(1.04); }}
+}}
+@keyframes glow {{
+    0%, 100% {{ box-shadow: 0 0 6px {T['accent']}40; }}
+    50%       {{ box-shadow: 0 0 20px {T['accent']}80; }}
+}}
+@keyframes countUp {{
+    from {{ opacity: 0; transform: scale(0.85); }}
+    to   {{ opacity: 1; transform: scale(1); }}
+}}
+
+/* Apply animations */
+.card {{
+    animation: fadeInUp 0.35s ease both;
+}}
+.card-grad {{
+    animation: fadeInUp 0.4s ease both;
+}}
+.sug {{
+    animation: slideInLeft 0.3s ease both;
+}}
+.lbr {{
+    animation: fadeInUp 0.3s ease both;
+}}
+.post {{
+    animation: fadeInUp 0.3s ease both;
+}}
+
+/* Score ring glow animation */
+.ring-wrap svg circle:last-child {{
+    animation: none;
+    transition: stroke-dasharray 0.8s cubic-bezier(0.4,0,0.2,1);
+}}
+
+/* Button pulse on hover */
+.stButton > button:hover {{
+    animation: pulse 0.4s ease;
+}}
+
+/* Badge earned glow */
+.badge-earned {{
+    animation: glow 2s ease infinite;
+}}
+
+/* New badge notification */
+.new-badge-pop {{
+    animation: fadeInUp 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
+}}
+
+/* Stagger card animations */
+.card:nth-child(1) {{ animation-delay: 0.05s; }}
+.card:nth-child(2) {{ animation-delay: 0.10s; }}
+.card:nth-child(3) {{ animation-delay: 0.15s; }}
+.card:nth-child(4) {{ animation-delay: 0.20s; }}
+.card:nth-child(5) {{ animation-delay: 0.25s; }}
+
+/* XP popup animation */
+.xp-toast {{
+    position: fixed; bottom: 24px; right: 24px;
+    background: {T['accent']}; color: #fff;
+    padding: 10px 18px; border-radius: 30px;
+    font-weight: 700; font-size: 14px;
+    animation: fadeInUp 0.4s ease, fadeIn 0.5s 2.5s reverse ease forwards;
+    z-index: 9999;
+}}
+
+/* Hero text animation on landing */
+.hero-animate {{
+    animation: fadeInUp 0.6s ease both;
+}}
+.hero-animate-delay {{
+    animation: fadeInUp 0.6s 0.2s ease both;
+}}
 </style>
 """
 
@@ -770,10 +916,10 @@ st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
 
 # ── TABS ──────────────────────────────────────
 tab_names = ["Score", "Dashboard", "Tracker", "Lend / Borrow",
-             "Learn", "Community", "Insights", "Me"]
+             "Learn", "Know Finance", "Current Affairs", "Community", "Insights", "Me"]
 tabs = st.tabs(tab_names)
 (t_score, t_dash, t_track, t_lend,
- t_learn, t_comm, t_insights, t_me) = tabs
+ t_learn, t_know, t_affairs, t_comm, t_insights, t_me) = tabs
 
 
 # ════════════════════════════════════════════
@@ -1476,6 +1622,237 @@ with t_learn:
                 unsafe_allow_html=True,
             )
         st.markdown('</div>', unsafe_allow_html=True)
+
+
+# ════════════════════════════════════════════
+# KNOW FINANCE TAB
+# ════════════════════════════════════════════
+with t_know:
+    st.markdown(
+        f"<div style='animation:fadeInUp 0.4s ease both;'>"
+        f"<div style='font-size:22px;font-weight:800;color:{T['text']};margin-bottom:4px;'>"
+        f"Finance Knowledge Base</div>"
+        f"<div style='font-size:14px;color:{T['muted']};margin-bottom:20px;'>"
+        f"Real questions. Deep answers. Inspired by India's best finance educators.</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    # Search bar
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    lbl("Search Any Finance Topic")
+    search_q = st.text_input("Search", placeholder="e.g. CIBIL score, mutual funds, inflation, IPO...",
+                              label_visibility="collapsed", key="know_search")
+    if search_q and len(search_q) >= 3:
+        results = search_qa(search_q)
+        if results:
+            st.markdown(f"<div style='font-size:12px;color:{T['muted']};margin-bottom:12px;'>{len(results)} result(s) found</div>", unsafe_allow_html=True)
+            for q in results[:5]:
+                with st.expander(f"{q['question']}"):
+                    st.markdown(
+                        f"<div style='font-size:14px;color:{T['sub']};line-height:1.85;white-space:pre-line;'>"
+                        f"{q['answer'].strip()}</div>",
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(
+                        f"<div style='margin-top:12px;padding:8px 12px;background:{T['green_bg']};"
+                        f"border:1px solid {T['green_br']};border-radius:7px;'>"
+                        f"<span style='font-size:10px;color:{T['muted']};text-transform:uppercase;"
+                        f"letter-spacing:0.1em;font-weight:700;'>Source</span><br>"
+                        f"<a href='{q['source_url']}' target='_blank' "
+                        f"style='font-size:12px;color:{T['accent']};text-decoration:none;font-weight:600;'>"
+                        f"{q['source']}</a></div>",
+                        unsafe_allow_html=True,
+                    )
+        else:
+            st.info("No results found. Try different keywords.")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Category filter
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    lbl("Browse by Category")
+    selected_cat = st.radio(
+        "Category",
+        ["All"] + ALL_QA_CATEGORIES,
+        horizontal=True,
+        label_visibility="collapsed",
+        key="know_cat",
+    )
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Q&A by category
+    qa_by_cat = get_qa_by_category()
+    cats_to_show = ALL_QA_CATEGORIES if selected_cat == "All" else [selected_cat]
+
+    for cat in cats_to_show:
+        if cat not in qa_by_cat:
+            continue
+        st.markdown(
+            f"<div style='font-size:16px;font-weight:800;color:{T['accent']};"
+            f"margin:22px 0 10px 0;'>{cat}</div>",
+            unsafe_allow_html=True,
+        )
+        for q in qa_by_cat[cat]:
+            with st.expander(q["question"]):
+                st.markdown(
+                    f"<div style='font-size:14px;color:{T['sub']};line-height:1.9;"
+                    f"white-space:pre-line;margin-bottom:14px;'>{q['answer'].strip()}</div>",
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    f"<div style='padding:10px 14px;background:{T['green_bg']};"
+                    f"border:1px solid {T['green_br']};border-radius:8px;"
+                    f"display:flex;justify-content:space-between;align-items:center;'>"
+                    f"<div><span style='font-size:10px;color:{T['muted']};text-transform:uppercase;"
+                    f"letter-spacing:0.1em;font-weight:700;display:block;margin-bottom:3px;'>Inspired by</span>"
+                    f"<span style='font-size:13px;color:{T['sub']};'>{q['source']}</span></div>"
+                    f"<a href='{q['source_url']}' target='_blank' "
+                    f"style='font-size:11px;color:{T['accent']};text-decoration:none;"
+                    f"font-weight:700;white-space:nowrap;'>Watch on YouTube →</a></div>",
+                    unsafe_allow_html=True,
+                )
+                # Tags
+                tags_html = "".join(
+                    f"<span style='display:inline-block;background:{T['bg']};border:1px solid {T['border']};"
+                    f"border-radius:20px;padding:2px 10px;font-size:10px;color:{T['muted']};"
+                    f"margin:3px;'>{tag}</span>"
+                    for tag in q.get("tags", [])
+                )
+                if tags_html:
+                    st.markdown(f"<div style='margin-top:8px;'>{tags_html}</div>", unsafe_allow_html=True)
+
+    # YouTube channels section
+    st.markdown(
+        f"<div style='font-size:20px;font-weight:800;color:{T['text']};margin:32px 0 12px 0;'>"
+        f"Top Indian Finance YouTube Channels</div>",
+        unsafe_allow_html=True,
+    )
+    yt1, yt2 = st.columns(2)
+    for i, ch in enumerate(YOUTUBE_CHANNELS):
+        with (yt1 if i % 2 == 0 else yt2):
+            st.markdown(
+                f"<div class='card' style='margin-bottom:10px;'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:flex-start;gap:8px;'>"
+                f"<div style='font-size:15px;font-weight:700;color:{T['text']};'>{ch['name']}</div>"
+                f"<a href='{ch['url']}' target='_blank' "
+                f"style='font-size:11px;color:{T['accent']};text-decoration:none;font-weight:700;"
+                f"white-space:nowrap;'>Subscribe →</a></div>"
+                f"<div style='font-size:10px;color:{T['muted']};margin:2px 0 6px;'>"
+                f"{ch['handle']}  ·  {ch['subscribers']}</div>"
+                f"<div style='font-size:12px;color:{T['sub']};line-height:1.6;"
+                f"margin-bottom:5px;'>{ch['specialty']}</div>"
+                f"<div style='font-size:11px;color:{T['muted']};'>"
+                f"Best for: {ch['best_for']}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+
+# ════════════════════════════════════════════
+# CURRENT AFFAIRS TAB
+# ════════════════════════════════════════════
+with t_affairs:
+    st.markdown(
+        f"<div style='animation:fadeInUp 0.4s ease both;'>"
+        f"<div style='font-size:22px;font-weight:800;color:{T['text']};margin-bottom:4px;'>"
+        f"Current Affairs in Finance</div>"
+        f"<div style='font-size:14px;color:{T['muted']};margin-bottom:6px;'>"
+        f"Stay informed about what's happening in India's economy and markets.</div>"
+        f"<div style='font-size:12px;color:{T['border']};margin-bottom:20px;'>"
+        f"Content last reviewed: April 2025. For real-time news, follow the linked sources.</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    # Live news links card
+    st.markdown('<div class="card-grad">', unsafe_allow_html=True)
+    lbl("Live News Sources")
+    st.markdown(
+        f"<div style='font-size:13px;color:{T['sub']};margin-bottom:14px;line-height:1.7;'>"
+        f"For real-time market news and economic updates, follow these trusted sources:</div>",
+        unsafe_allow_html=True,
+    )
+    news_sources = [
+        ("RBI Official",           "https://www.rbi.org.in",                  "Monetary policy, repo rate, banking regulations"),
+        ("SEBI",                    "https://www.sebi.gov.in",                 "Market regulations, investor protection"),
+        ("Moneycontrol",            "https://www.moneycontrol.com",            "Markets, mutual funds, personal finance news"),
+        ("Economic Times — Markets","https://economictimes.indiatimes.com/markets","Budget, economy, corporate results"),
+        ("Zerodha Varsity Blog",    "https://zerodha.com/varsity",             "Free learning + market insights"),
+        ("Freefincal",              "https://freefincal.com",                  "Data-driven personal finance research"),
+        ("AMFI India",              "https://www.amfiindia.com",               "Mutual fund NAV data, industry statistics"),
+        ("BSE India",               "https://www.bseindia.com",                "Official BSE market data"),
+    ]
+    nl1, nl2 = st.columns(2)
+    for i, (name, url, desc) in enumerate(news_sources):
+        with (nl1 if i % 2 == 0 else nl2):
+            st.markdown(
+                f"<div style='padding:9px 0;border-bottom:1px solid {T['border']};'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:center;'>"
+                f"<span style='font-size:13px;color:{T['text']};font-weight:700;'>{name}</span>"
+                f"<a href='{url}' target='_blank' style='font-size:11px;color:{T['accent']};"
+                f"text-decoration:none;font-weight:700;'>Visit →</a></div>"
+                f"<div style='font-size:11px;color:{T['muted']};margin-top:2px;'>{desc}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Current affairs articles
+    for ca in CURRENT_AFFAIRS:
+        rel_color = T['accent'] if ca["relevance"] == "High" else "#f59e0b"
+        with st.expander(f"{ca['title']}  ·  {ca['category']}"):
+            st.markdown(
+                f"<div style='display:inline-block;background:{rel_color}20;border:1px solid {rel_color};"
+                f"border-radius:4px;padding:2px 8px;font-size:10px;color:{rel_color};"
+                f"font-weight:700;text-transform:uppercase;letter-spacing:0.1em;"
+                f"margin-bottom:12px;'>Relevance: {ca['relevance']}</div>",
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                f"<div style='font-size:14px;color:{T['sub']};line-height:1.9;"
+                f"white-space:pre-line;margin-bottom:14px;'>{ca['summary'].strip()}</div>",
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                f"<div style='padding:9px 13px;background:{T['green_bg']};"
+                f"border:1px solid {T['green_br']};border-radius:7px;"
+                f"display:flex;justify-content:space-between;align-items:center;'>"
+                f"<span style='font-size:12px;color:{T['sub']};'>{ca['source']}</span>"
+                f"<a href='{ca['source_url']}' target='_blank' "
+                f"style='font-size:11px;color:{T['accent']};text-decoration:none;"
+                f"font-weight:700;white-space:nowrap;'>Official Source →</a></div>",
+                unsafe_allow_html=True,
+            )
+
+    # Finance calendar
+    st.markdown(
+        f"<div style='font-size:18px;font-weight:800;color:{T['text']};margin:28px 0 12px 0;'>"
+        f"Key Financial Dates to Know</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    calendar_items = [
+        ("1 April",        "New financial year begins — review and rebalance portfolio"),
+        ("31 July",        "ITR filing deadline for most individuals"),
+        ("15 September",   "Advance tax 3rd installment deadline"),
+        ("31 October",     "ITR filing deadline for audit cases"),
+        ("31 January",     "Last date to submit investment proofs to employer for TDS"),
+        ("31 March",       "Last date for 80C investments, tax-saving FDs, last-minute tax planning"),
+        ("Every 6 months", "Review and rebalance your investment portfolio"),
+        ("Every year",     "Check your CIBIL score free at cibil.com"),
+        ("6 times/year",   "RBI Monetary Policy Committee meetings — watch for rate changes"),
+    ]
+    for date_str, desc in calendar_items:
+        st.markdown(
+            f"<div style='display:flex;gap:14px;padding:9px 0;"
+            f"border-bottom:1px solid {T['border']};align-items:flex-start;'>"
+            f"<div style='font-family:Space Mono,monospace;font-size:12px;color:{T['accent']};"
+            f"font-weight:700;min-width:130px;flex-shrink:0;'>{date_str}</div>"
+            f"<div style='font-size:13px;color:{T['sub']};line-height:1.5;'>{desc}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ════════════════════════════════════════════
